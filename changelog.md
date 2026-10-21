@@ -1,3 +1,13 @@
+## v0.1.1 – 2026-10-21
+
+### Maintenance
+
+- Updated dependencies, including comfy-table 8 and dirs 7
+
+**Full Changelog**: https://github.com/vladkens/unjar/compare/v0.1.0...v0.1.1
+
+---
+
 ## v0.1.0 – 2026-08-02
 
 ### Features

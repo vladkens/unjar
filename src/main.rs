@@ -78,7 +78,7 @@ fn main() -> Result<()> {
 
 fn print_profiles() {
   let mut table = Table::new();
-  table.load_preset(NOTHING);
+  table.load_style(NOTHING);
   table.set_content_arrangement(ContentArrangement::Dynamic);
   table.set_header(
     ["Browser", "Profile", "Default", "Path"]
