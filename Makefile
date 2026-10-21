@@ -1,4 +1,4 @@
-.PHONY: prepare check test docs build update
+.PHONY: prepare check test build update clean
 
 prepare:
 	cargo +nightly fmt
@@ -16,12 +16,17 @@ test:
 	cargo test --locked
 	cargo test --lib --no-default-features --locked
 
-docs:
-	RUSTDOCFLAGS="-D warnings" cargo doc --lib --no-default-features --locked --no-deps --open
-
 build:
 	cargo build --release --locked
 	ls -lh target/release/unjar
 
 update:
 	cargo upgrade -i
+
+clean:
+	cargo clean
+
+.PHONY: docs
+
+docs: # the library docs as docs.rs builds them, opened in the browser
+	RUSTDOCFLAGS="-D warnings" cargo doc --lib --no-default-features --locked --no-deps --open
