@@ -28,9 +28,6 @@ clean:
 
 .PHONY: dist docs
 
-# The prebuilt binary as target/distrib/unjar-dev-aarch64-apple-darwin.tar.gz, from an Apple
-# Silicon Mac. `unjar -V` must say the package version: the crate's on a release commit,
-# `git describe`'s otherwise (rust-build sets it in Cargo.toml).
 dist: # the release archive for CI (vladkens/actions/rust-build)
 	cargo build --release --locked --target aarch64-apple-darwin
 	v="unjar $$(cargo pkgid | sed 's/.*[#@]//')"; b="$$(target/aarch64-apple-darwin/release/unjar -V)"; \
