@@ -1,127 +1,58 @@
 name: main
 
+# Never pull_request_target or issue_comment: they run PR code with the base branch's rights.
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# Main runs queue instead, so a dev release is never cut off; a release commit gets its own group.
+concurrency:
+  group: ${{ github.workflow }}-${{ startsWith(github.event.head_commit.message, 'release:') && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # A Mac, where the binary ships: on Linux clippy fails on the macOS-only Safari code as dead.
   test:
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/cache@v6
+      - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-
-      - run: rustup update --no-self-update stable && rustup default stable
+          shared-key: release
+          save-if: ${{ github.event_name != 'pull_request' }}
       - run: rustup toolchain install nightly --profile minimal --component rustfmt
-      - run: make check test
+      - run: make check
+      - run: make test
       - run: RUSTDOCFLAGS="-D warnings" cargo doc --lib --no-default-features --locked --no-deps
 
-  publish:
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: macos-latest
-    needs: test
-    permissions:
-      contents: read
-      id-token: write
+  # The shared release steps (github.com/vladkens/actions): `build` runs `make dist` read-only
+  # (beside `test`); on main `publish` puts the archive up as the `dev` pre-release, and a
+  # `release: vX.Y.Z (#N)` commit publishes the crate and creates the tag and the GitHub release
+  # with the same archive. `publish` never compiles. Users check an archive with
+  # `gh attestation verify FILE -R vladkens/unjar`.
+  build:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest # the aarch64-apple-darwin binary needs a Mac
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/cache@v6
+      - uses: vladkens/actions/rust-build@v1
         with:
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+          dist: make dist
 
-      - run: rustup update --no-self-update stable && rustup default stable
-
-      - name: Check Cargo.toml version matches tag
-        run: |
-          TAG="${{ github.ref_name }}"
-          CARGO_VERSION="v$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')"
-          if [ "$TAG" != "$CARGO_VERSION" ]; then
-            echo "Error: tag ${TAG} does not match Cargo.toml version ${CARGO_VERSION}"
-            exit 1
-          fi
-
-      - name: Check release package
-        run: |
-          make build
-          test "$(./target/release/unjar -V)" = "unjar ${GITHUB_REF_NAME#v}"
-          VERSION="${{ github.ref_name }}"
-          NOTES=$(awk "/^## ${VERSION}/{found=1; next} /^## /{found=0} found && !/^---$/" changelog.md)
-          test -n "$NOTES"
-          cargo publish --dry-run --locked
-
-      # https://crates.io/docs/trusted-publishing
-      - uses: rust-lang/crates-io-auth-action@v1
-        if: ${{ github.ref_name != 'v0.1.0' }}
-        id: auth
-      - run: cargo publish --locked
-        if: ${{ github.ref_name != 'v0.1.0' }}
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-
-  release:
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: macos-latest
-    needs: publish
+  publish:
+    if: github.ref == 'refs/heads/main' # write rights only for main's own workflow
+    needs: [test, build]
+    runs-on: ubuntu-latest # no build here, and Linux runners start faster
     permissions:
       attestations: write
       contents: write
-      id-token: write
+      id-token: write # crates.io Trusted Publishing and attestations
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/cache@v6
-        with:
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-
-      - run: rustup update --no-self-update stable && rustup default stable
-      - run: make build
-
-      - name: Check binary version matches tag
-        run: |
-          test "$(rustc -vV | sed -n 's/^host: //p')" = "aarch64-apple-darwin"
-          test "$(./target/release/unjar -V)" = "unjar ${GITHUB_REF_NAME#v}"
-
-      - name: Archive binary
-        run: |
-          VERSION="${{ github.ref_name }}"
-          cp target/release/unjar unjar
-          tar czf "unjar-${VERSION}-aarch64-apple-darwin.tar.gz" readme.md LICENSE unjar
-
-      - uses: actions/attest@v4
-        with:
-          subject-path: unjar-${{ github.ref_name }}-*.tar.gz
-
-      - name: Extract changelog entry
-        run: |
-          VERSION="${{ github.ref_name }}"
-          NOTES=$(awk "/^## ${VERSION}/{found=1; next} /^## /{found=0} found && !/^---$/" changelog.md)
-          if [ -z "$NOTES" ]; then
-            echo "Error: no changelog entry found for ${VERSION}"
-            exit 1
-          fi
-          echo "$NOTES" > release_notes.txt
-
-      - name: Create GitHub release
-        run: |
-          gh release create "${{ github.ref_name }}" \
-            --notes-file release_notes.txt \
-            unjar-${{ github.ref_name }}-*.tar.gz
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: vladkens/actions/rust-publish@v1
