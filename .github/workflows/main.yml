@@ -1,6 +1,5 @@
 name: main
 
-# Never pull_request_target or issue_comment: they run PR code with the base branch's rights.
 on:
   push:
     branches: [main]
@@ -10,13 +9,11 @@ on:
 permissions:
   contents: read
 
-# Main runs queue instead, so a dev release is never cut off; a release commit gets its own group.
 concurrency:
   group: ${{ github.workflow }}-${{ startsWith(github.event.head_commit.message, 'release:') && github.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # A Mac, where the binary ships: on Linux clippy fails on the macOS-only Safari code as dead.
   test:
     runs-on: macos-latest
     timeout-minutes: 20
@@ -31,14 +28,9 @@ jobs:
       - run: make test
       - run: RUSTDOCFLAGS="-D warnings" cargo doc --lib --no-default-features --locked --no-deps
 
-  # The shared release steps (github.com/vladkens/actions): `build` runs `make dist` read-only
-  # (beside `test`); on main `publish` puts the archive up as the `dev` pre-release, and a
-  # `release: vX.Y.Z (#N)` commit publishes the crate and creates the tag and the GitHub release
-  # with the same archive. `publish` never compiles. Users check an archive with
-  # `gh attestation verify FILE -R vladkens/unjar`.
   build:
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-latest # the aarch64-apple-darwin binary needs a Mac
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
       - uses: vladkens/actions/rust-build@v1
@@ -46,13 +38,13 @@ jobs:
           dist: make dist
 
   publish:
-    if: github.ref == 'refs/heads/main' # write rights only for main's own workflow
+    if: github.ref == 'refs/heads/main'
     needs: [test, build]
-    runs-on: ubuntu-latest # no build here, and Linux runners start faster
+    runs-on: ubuntu-latest
     permissions:
       attestations: write
       contents: write
-      id-token: write # crates.io Trusted Publishing and attestations
+      id-token: write
     steps:
       - uses: actions/checkout@v7
       - uses: vladkens/actions/rust-publish@v1
