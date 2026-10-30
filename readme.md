@@ -109,6 +109,12 @@ let header = jar.to_header(); // or hand them straight to an HTTP client
 
 Pull requests are welcome. When reporting a bug, include the output of `unjar list` and your browser's version.
 
+## 🤖 How it's made
+
+unjar is written by AI agents (Claude Code, Codex); I choose what to build and review every pull request. Its tests run on macOS in CI and cover finding Chromium, Firefox and Safari profiles, parsing Safari's binary cookie files (truncated and malformed ones included), domain matching and the `cookies.txt`, JSON and header formats. I've written software by hand for years ([macmon](https://github.com/vladkens/macmon), [twscrape](https://github.com/vladkens/twscrape), [ecloop](https://github.com/vladkens/ecloop)); agents are how I build now.
+
+Releases are rare; the CLI and data formats stay compatible, the API may still change before 1.0, and every break is listed in [changelog.md](changelog.md).
+
 ## 📝 License
 
 Distributed under the [MIT License](LICENSE).
