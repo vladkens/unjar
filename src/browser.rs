@@ -17,6 +17,10 @@ pub enum Browser {
   Chromium,
   Edge,
   Brave,
+  Vivaldi,
+  Opera,
+  Arc,
+  Helium,
   Firefox,
   Safari,
 }
@@ -42,11 +46,15 @@ pub(crate) enum Kind {
 
 impl Browser {
   /// All browser variants known to this version of unjar.
-  pub const ALL: [Browser; 6] = [
+  pub const ALL: [Browser; 10] = [
     Browser::Chrome,
     Browser::Chromium,
     Browser::Edge,
     Browser::Brave,
+    Browser::Vivaldi,
+    Browser::Opera,
+    Browser::Arc,
+    Browser::Helium,
     Browser::Firefox,
     Browser::Safari,
   ];
@@ -222,6 +230,10 @@ impl fmt::Display for Browser {
       Browser::Chromium => "chromium",
       Browser::Edge => "edge",
       Browser::Brave => "brave",
+      Browser::Vivaldi => "vivaldi",
+      Browser::Opera => "opera",
+      Browser::Arc => "arc",
+      Browser::Helium => "helium",
       Browser::Firefox => "firefox",
       Browser::Safari => "safari",
     };
@@ -238,6 +250,10 @@ impl FromStr for Browser {
       "chromium" => Ok(Browser::Chromium),
       "edge" => Ok(Browser::Edge),
       "brave" => Ok(Browser::Brave),
+      "vivaldi" => Ok(Browser::Vivaldi),
+      "opera" => Ok(Browser::Opera),
+      "arc" => Ok(Browser::Arc),
+      "helium" => Ok(Browser::Helium),
       "firefox" | "ff" => Ok(Browser::Firefox),
       "safari" => Ok(Browser::Safari),
       other => Err(format!("unknown browser: {other}").into()),
@@ -257,7 +273,7 @@ impl FromStr for Browser {
 pub fn profiles() -> Vec<Profile> {
   let mut profiles = Vec::new();
 
-  for browser in [Browser::Chrome, Browser::Chromium, Browser::Edge, Browser::Brave] {
+  for browser in Browser::ALL.into_iter().filter(|browser| browser.kind() == Kind::Chromium) {
     if let Some(root) = chromium_root(browser) {
       profiles.extend(profiles_in_root(browser, &root));
     }
@@ -423,12 +439,13 @@ fn profiles_in_root(browser: Browser, root: &Path) -> Vec<Profile> {
     .filter_map(std::result::Result::ok)
     .filter_map(|entry| {
       let file_type = entry.file_type().ok()?;
-      if !file_type.is_dir() || file_type.is_symlink() {
+      let directory = entry.file_name().to_string_lossy().into_owned();
+      // `Network` holds the cookies of a profile kept in the root, not a profile of its own.
+      if !file_type.is_dir() || file_type.is_symlink() || directory == "Network" {
         return None;
       }
       let path = entry.path();
       let cookie_db = profile_cookie_db(&path)?;
-      let directory = entry.file_name().to_string_lossy().into_owned();
       Some(Profile {
         browser,
         id: directory.clone(),
@@ -439,6 +456,21 @@ fn profiles_in_root(browser: Browser, root: &Path) -> Vec<Profile> {
       })
     })
     .collect();
+
+  // Some browsers, such as Opera, keep their only profile in the user-data directory itself; treat
+  // it as `Default` unless a `Default` subdirectory already holds one.
+  if !profiles.iter().any(|profile| profile.id == "Default")
+    && let Some(cookie_db) = profile_cookie_db(root)
+  {
+    profiles.push(Profile {
+      browser,
+      id: "Default".into(),
+      name: profile_name(root).unwrap_or_else(|| "Default".into()),
+      is_default: false,
+      path: root.to_path_buf(),
+      cookie_db,
+    });
+  }
 
   let default_id = chromium_default_profile_id(root)
     .filter(|id| profiles.iter().any(|profile| profile.id == *id))
@@ -479,13 +511,16 @@ fn chromium_root(browser: Browser) -> Option<PathBuf> {
   #[cfg(target_os = "macos")]
   let base = dirs::config_dir()?;
   #[cfg(target_os = "linux")]
-  let base = if browser == Browser::Chrome {
-    std::env::var_os("CHROME_CONFIG_HOME").map(PathBuf::from).or_else(dirs::config_dir)?
-  } else {
-    dirs::config_dir()?
-  };
+  let base = match browser {
+    Browser::Chrome => std::env::var_os("CHROME_CONFIG_HOME"),
+    // https://github.com/imputnet/helium-linux/blob/main/patches/helium/linux/change-chromium-branding.patch
+    Browser::Helium => std::env::var_os("HELIUM_CONFIG_HOME"),
+    _ => None,
+  }
+  .map(PathBuf::from)
+  .or_else(dirs::config_dir)?;
   #[cfg(target_os = "windows")]
-  let base = dirs::data_local_dir()?;
+  let base = if browser == Browser::Opera { dirs::config_dir()? } else { dirs::data_local_dir()? };
 
   #[cfg(target_os = "macos")]
   let rel: &[&str] = match browser {
@@ -493,6 +528,10 @@ fn chromium_root(browser: Browser) -> Option<PathBuf> {
     Browser::Chromium => &["Chromium"],
     Browser::Edge => &["Microsoft Edge"],
     Browser::Brave => &["BraveSoftware", "Brave-Browser"],
+    Browser::Vivaldi => &["Vivaldi"],
+    Browser::Opera => &["com.operasoftware.Opera"],
+    Browser::Arc => &["Arc", "User Data"],
+    Browser::Helium => &["net.imput.helium"],
     _ => return None,
   };
   #[cfg(target_os = "linux")]
@@ -501,14 +540,20 @@ fn chromium_root(browser: Browser) -> Option<PathBuf> {
     Browser::Chromium => &["chromium"],
     Browser::Edge => &["microsoft-edge"],
     Browser::Brave => &["BraveSoftware", "Brave-Browser"],
+    Browser::Vivaldi => &["vivaldi"],
+    Browser::Opera => &["opera"],
+    Browser::Helium => &["net.imput.helium"],
     _ => return None,
   };
   #[cfg(target_os = "windows")]
   let rel: &[&str] = match browser {
-    Browser::Chrome => &["Google", "Chrome"],
-    Browser::Chromium => &["Chromium"],
-    Browser::Edge => &["Microsoft", "Edge"],
-    Browser::Brave => &["BraveSoftware", "Brave-Browser"],
+    Browser::Chrome => &["Google", "Chrome", "User Data"],
+    Browser::Chromium => &["Chromium", "User Data"],
+    Browser::Edge => &["Microsoft", "Edge", "User Data"],
+    Browser::Brave => &["BraveSoftware", "Brave-Browser", "User Data"],
+    Browser::Vivaldi => &["Vivaldi", "User Data"],
+    Browser::Opera => &["Opera Software", "Opera Stable"],
+    Browser::Helium => &["imput", "Helium", "User Data"],
     _ => return None,
   };
 
@@ -516,8 +561,6 @@ fn chromium_root(browser: Browser) -> Option<PathBuf> {
   for part in rel {
     root.push(part);
   }
-  #[cfg(target_os = "windows")]
-  root.push("User Data");
 
   Some(root)
 }
@@ -826,6 +869,52 @@ mod tests {
     let found = profiles_in_root(Browser::Chrome, dir.path());
     assert!(found.iter().find(|profile| profile.id() == "Profile 1").unwrap().is_default());
     assert!(!found.iter().find(|profile| profile.id() == "Default").unwrap().is_default());
+  }
+
+  #[test]
+  fn discovers_profile_kept_in_user_data_root() {
+    let dir = tempdir().unwrap();
+    fs::write(dir.path().join("Cookies"), []).unwrap();
+    fs::write(dir.path().join("Preferences"), r#"{"profile":{"name":"Personal"}}"#).unwrap();
+
+    let found = profiles_in_root(Browser::Opera, dir.path());
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id(), "Default");
+    assert_eq!(found[0].name(), "Personal");
+    assert!(found[0].is_default());
+    assert_eq!(found[0].path(), dir.path());
+    assert_eq!(found[0].cookie_db(), dir.path().join("Cookies"));
+
+    profile(dir.path(), "Default", Some("Work"), false);
+    let found = profiles_in_root(Browser::Opera, dir.path());
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id(), "Default");
+    assert_eq!(found[0].name(), "Work");
+    assert_eq!(found[0].path(), dir.path().join("Default"));
+    assert_eq!(found[0].cookie_db(), dir.path().join("Default").join("Cookies"));
+  }
+
+  #[test]
+  fn root_network_cookies_are_not_a_separate_profile() {
+    let dir = tempdir().unwrap();
+    let db = dir.path().join("Network").join("Cookies");
+    fs::create_dir_all(db.parent().unwrap()).unwrap();
+    fs::write(&db, []).unwrap();
+
+    let found = profiles_in_root(Browser::Opera, dir.path());
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id(), "Default");
+    assert!(found[0].is_default());
+    assert_eq!(found[0].path(), dir.path());
+    assert_eq!(found[0].cookie_db(), db);
+  }
+
+  #[test]
+  fn browser_names_round_trip() {
+    for browser in Browser::ALL {
+      assert_eq!(browser.to_string().parse::<Browser>().unwrap(), browser);
+    }
+    assert_eq!("Helium".parse::<Browser>().unwrap(), Browser::Helium);
   }
 
   #[test]
