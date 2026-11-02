@@ -2,8 +2,8 @@
 
 ### Breaking Changes
 
-- `Browser::ALL` now lists 10 browsers, so its type changed from `[Browser; 6]` to `[Browser; 10]`
-- `Error::Database` now wraps a rusqlite 0.41 error
+- Replaced `Browser::ALL` with `Browser::all()`, an iterator over the supported browsers, so adding a browser no longer changes its type
+- `Error::Database` now holds unjar's own `DatabaseError` instead of a rusqlite error, and `unjar::Error` no longer converts from rusqlite errors, so rusqlite upgrades stay out of unjar's API; the message is the same and `source()` returns the original error
 
 ### Features
 
