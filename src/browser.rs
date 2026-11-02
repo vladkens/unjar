@@ -46,7 +46,7 @@ pub(crate) enum Kind {
 
 impl Browser {
   /// All browser variants known to this version of unjar.
-  pub const ALL: &[Browser] = &[
+  pub const ALL: [Browser; 10] = [
     Browser::Chrome,
     Browser::Chromium,
     Browser::Edge,
@@ -273,7 +273,7 @@ impl FromStr for Browser {
 pub fn profiles() -> Vec<Profile> {
   let mut profiles = Vec::new();
 
-  for &browser in Browser::ALL.iter().filter(|browser| browser.kind() == Kind::Chromium) {
+  for browser in Browser::ALL.into_iter().filter(|browser| browser.kind() == Kind::Chromium) {
     if let Some(root) = chromium_root(browser) {
       profiles.extend(profiles_in_root(browser, &root));
     }
@@ -439,12 +439,13 @@ fn profiles_in_root(browser: Browser, root: &Path) -> Vec<Profile> {
     .filter_map(std::result::Result::ok)
     .filter_map(|entry| {
       let file_type = entry.file_type().ok()?;
-      if !file_type.is_dir() || file_type.is_symlink() {
+      let directory = entry.file_name().to_string_lossy().into_owned();
+      // `Network` holds the cookies of a profile kept in the root, not a profile of its own.
+      if !file_type.is_dir() || file_type.is_symlink() || directory == "Network" {
         return None;
       }
       let path = entry.path();
       let cookie_db = profile_cookie_db(&path)?;
-      let directory = entry.file_name().to_string_lossy().into_owned();
       Some(Profile {
         browser,
         id: directory.clone(),
@@ -894,8 +895,23 @@ mod tests {
   }
 
   #[test]
+  fn root_network_cookies_are_not_a_separate_profile() {
+    let dir = tempdir().unwrap();
+    let db = dir.path().join("Network").join("Cookies");
+    fs::create_dir_all(db.parent().unwrap()).unwrap();
+    fs::write(&db, []).unwrap();
+
+    let found = profiles_in_root(Browser::Opera, dir.path());
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id(), "Default");
+    assert!(found[0].is_default());
+    assert_eq!(found[0].path(), dir.path());
+    assert_eq!(found[0].cookie_db(), db);
+  }
+
+  #[test]
   fn browser_names_round_trip() {
-    for &browser in Browser::ALL {
+    for browser in Browser::ALL {
       assert_eq!(browser.to_string().parse::<Browser>().unwrap(), browser);
     }
     assert_eq!("Helium".parse::<Browser>().unwrap(), Browser::Helium);
