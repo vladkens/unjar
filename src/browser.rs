@@ -44,20 +44,32 @@ pub(crate) enum Kind {
   Safari,
 }
 
+const ALL: [Browser; 10] = [
+  Browser::Chrome,
+  Browser::Chromium,
+  Browser::Edge,
+  Browser::Brave,
+  Browser::Vivaldi,
+  Browser::Opera,
+  Browser::Arc,
+  Browser::Helium,
+  Browser::Firefox,
+  Browser::Safari,
+];
+
 impl Browser {
-  /// All browser variants known to this version of unjar.
-  pub const ALL: [Browser; 10] = [
-    Browser::Chrome,
-    Browser::Chromium,
-    Browser::Edge,
-    Browser::Brave,
-    Browser::Vivaldi,
-    Browser::Opera,
-    Browser::Arc,
-    Browser::Helium,
-    Browser::Firefox,
-    Browser::Safari,
-  ];
+  /// Iterate over all browsers known to this version of unjar.
+  ///
+  /// # Examples
+  ///
+  /// ```
+  /// for browser in unjar::Browser::all() {
+  ///   println!("{browser}");
+  /// }
+  /// ```
+  pub fn all() -> impl Iterator<Item = Browser> {
+    ALL.into_iter()
+  }
 
   pub(crate) fn kind(&self) -> Kind {
     match self {
@@ -273,7 +285,7 @@ impl FromStr for Browser {
 pub fn profiles() -> Vec<Profile> {
   let mut profiles = Vec::new();
 
-  for browser in Browser::ALL.into_iter().filter(|browser| browser.kind() == Kind::Chromium) {
+  for browser in Browser::all().filter(|browser| browser.kind() == Kind::Chromium) {
     if let Some(root) = chromium_root(browser) {
       profiles.extend(profiles_in_root(browser, &root));
     }
@@ -911,7 +923,7 @@ mod tests {
 
   #[test]
   fn browser_names_round_trip() {
-    for browser in Browser::ALL {
+    for browser in Browser::all() {
       assert_eq!(browser.to_string().parse::<Browser>().unwrap(), browser);
     }
     assert_eq!("Helium".parse::<Browser>().unwrap(), Browser::Helium);
