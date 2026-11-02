@@ -2,8 +2,9 @@
 
 ### Breaking Changes
 
-- Replaced `Browser::ALL` with `Browser::all()`, an iterator over the supported browsers, so adding a browser no longer changes its type
-- `Error::Database` now holds unjar's own `DatabaseError` instead of a rusqlite error, and `unjar::Error` no longer converts from rusqlite errors, so rusqlite upgrades stay out of unjar's API; the message is the same and `source()` returns the original error
+- Replaced `Browser::ALL` with `Browser::all()`, an iterator over the supported browsers, so new browsers no longer break the API
+- `Error::Database` now holds unjar's own `DatabaseError` instead of a rusqlite error, so rusqlite upgrades no longer break unjar's API
+- `unjar::Error` no longer converts from rusqlite errors; the message is unchanged and `source()` returns the original rusqlite error
 
 ### Features
 
