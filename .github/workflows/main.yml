@@ -29,7 +29,7 @@ jobs:
       - run: RUSTDOCFLAGS="-D warnings" cargo doc --lib --no-default-features --locked --no-deps
 
   build:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: "github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || startsWith(github.event.pull_request.title, 'release: v')"
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7

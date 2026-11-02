@@ -29,7 +29,7 @@ use browser::Kind;
 
 pub use browser::{Browser, Profile, find_profile, profiles};
 pub use cookie::{Cookie, CookieJar};
-pub use error::{Error, Result};
+pub use error::{DatabaseError, Error, Result};
 
 impl Browser {
   /// Load all cookies from the profile selected by default for this browser.

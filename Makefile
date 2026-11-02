@@ -22,6 +22,7 @@ build:
 
 update:
 	cargo upgrade -i
+	cargo update
 
 clean:
 	cargo clean
