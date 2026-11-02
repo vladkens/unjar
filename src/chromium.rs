@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use crate::Result;
 use crate::browser::Browser;
 use crate::cookie::Cookie;
+use crate::{Error, Result};
 
 /// Read cookies from a chromium-family `Cookies` database (Chrome, Edge, Brave, ...).
 ///
@@ -13,27 +13,29 @@ pub(crate) fn read(path: &Path, browser: Browser) -> Result<Vec<Cookie>> {
 
   let key = decrypt::key(browser)?;
 
-  let mut stmt = conn.prepare(
-    "SELECT host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly \
-     FROM cookies",
-  )?;
+  let qs = "SELECT host_key, name, value, encrypted_value, path, expires_utc, is_secure, \
+            is_httponly FROM cookies";
+  let mut stmt = conn.prepare(qs).map_err(Error::database)?;
 
-  let rows = stmt.query_map([], |row| {
-    Ok((
-      row.get::<_, String>(0)?,  // host_key
-      row.get::<_, String>(1)?,  // name
-      row.get::<_, String>(2)?,  // value (plaintext, usually empty)
-      row.get::<_, Vec<u8>>(3)?, // encrypted_value
-      row.get::<_, String>(4)?,  // path
-      row.get::<_, i64>(5)?,     // expires_utc
-      row.get::<_, i64>(6)? != 0,
-      row.get::<_, i64>(7)? != 0,
-    ))
-  })?;
+  let rows = stmt
+    .query_map([], |row| {
+      Ok((
+        row.get::<_, String>(0)?,  // host_key
+        row.get::<_, String>(1)?,  // name
+        row.get::<_, String>(2)?,  // value (plaintext, usually empty)
+        row.get::<_, Vec<u8>>(3)?, // encrypted_value
+        row.get::<_, String>(4)?,  // path
+        row.get::<_, i64>(5)?,     // expires_utc
+        row.get::<_, i64>(6)? != 0,
+        row.get::<_, i64>(7)? != 0,
+      ))
+    })
+    .map_err(Error::database)?;
 
   let mut out = Vec::new();
   for row in rows {
-    let (domain, name, plain, enc, path, expires_utc, secure, http_only) = row?;
+    let (domain, name, plain, enc, path, expires_utc, secure, http_only) =
+      row.map_err(Error::database)?;
     let value = if !plain.is_empty() { plain } else { decrypt::value(&key, &domain, &enc)? };
     out.push(Cookie {
       domain,

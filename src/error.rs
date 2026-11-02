@@ -12,10 +12,16 @@ pub enum Error {
   Io(#[from] std::io::Error),
   /// A browser database operation failed.
   #[error(transparent)]
-  Database(#[from] rusqlite::Error),
+  Database(DatabaseError),
   /// Text returned by a platform service was not valid UTF-8.
   #[error(transparent)]
   Utf8(#[from] std::string::FromUtf8Error),
+}
+
+impl Error {
+  pub(crate) fn database(err: rusqlite::Error) -> Self {
+    Self::Database(DatabaseError(err))
+  }
 }
 
 impl fmt::Debug for Error {
@@ -36,5 +42,33 @@ impl From<&str> for Error {
   }
 }
 
+/// An error from reading a browser database.
+///
+/// It displays the database engine's message; [`source`](std::error::Error::source) returns the
+/// original error.
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+pub struct DatabaseError(#[source] rusqlite::Error);
+
 /// A result returned by unjar.
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+  use std::error::Error as _;
+
+  use super::*;
+
+  #[test]
+  fn database_error_keeps_message_and_source() {
+    let err = Error::database(rusqlite::Error::InvalidQuery);
+    assert_eq!(err.to_string(), rusqlite::Error::InvalidQuery.to_string());
+    assert!(err.source().unwrap().is::<rusqlite::Error>());
+  }
+
+  #[test]
+  fn error_is_thread_safe() {
+    fn check<T: Send + Sync + 'static>() {}
+    check::<Error>();
+  }
+}

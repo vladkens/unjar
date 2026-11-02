@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::{Connection, OpenFlags};
 use tempfile::TempDir;
 
-use crate::Result;
+use crate::{Error, Result};
 
 /// A SQLite connection, plus an optional temp copy cleaned up when dropped.
 pub(crate) struct Db {
@@ -30,7 +30,7 @@ pub(crate) fn open_copy(path: &Path) -> Result<Db> {
   let temp = TempCopy::of(path)?;
   // The copy is ours alone, so a normal read-write open is safe and lets SQLite
   // replay the copied WAL to surface the latest committed cookies.
-  let conn = Connection::open(&temp.db)?;
+  let conn = Connection::open(&temp.db).map_err(Error::database)?;
   Ok(Db { conn, _temp: Some(temp) })
 }
 
