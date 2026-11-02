@@ -69,6 +69,11 @@ mod decrypt {
       Browser::Chromium => ("Chromium", "Chromium Safe Storage"),
       Browser::Edge => ("Microsoft Edge", "Microsoft Edge Safe Storage"),
       Browser::Brave => ("Brave", "Brave Safe Storage"),
+      Browser::Vivaldi => ("Vivaldi", "Vivaldi Safe Storage"),
+      Browser::Opera => ("Opera", "Opera Safe Storage"),
+      Browser::Arc => ("Arc", "Arc Safe Storage"),
+      // Helium renames the Keychain item: https://github.com/imputnet/helium-macos/blob/main/patches/helium/macos/change-keychain-name.patch
+      Browser::Helium => ("Helium", "Helium Storage Key"),
       other => return Err(format!("{other}: no chromium Keychain entry").into()),
     })
   }

@@ -15,7 +15,7 @@
 
 ## 🌟 Features
 
-- 🌐 Chrome, Chromium, Edge, Brave, Firefox and Safari, with their profiles found for you
+- 🌐 Chrome, Chromium, Edge, Brave, Vivaldi, Opera, Arc, Helium, Firefox and Safari, with their profiles found for you
 - 🔓 Decrypts Chromium cookies with the key from the macOS Keychain
 - 📄 Netscape `cookies.txt` (curl, wget, yt-dlp), JSON, or a `Cookie:` header
 - 🎯 Pick a profile by ID, name, a unique part of it, or a path
@@ -79,10 +79,14 @@ unjar -f header x.com | twscrape add_cookie my_account
 | Chromium |  🟡   |  🟡   |   🚧    |
 | Edge     |  ✅   |  🟡   |   🚧    |
 | Brave    |  🟡   |  🟡   |   🚧    |
+| Vivaldi  |  🟡   |  🟡   |   🚧    |
+| Opera    |  🟡   |  🟡   |   🚧    |
+| Arc      |  🟡   |   —   |   🚧    |
+| Helium   |  ✅   |  🟡   |   🚧    |
 | Firefox  |  ✅   |  🟡   |   🟡    |
 | Safari   |  ✅   |   —   |    —    |
 
-Chrome, Edge, Firefox and Safari, with Safari's named profiles, are verified end to end on macOS. On Linux, Chromium cookies are decrypted with the `peanuts` fallback key only, so profiles whose key is in the system keyring (v11) don't decrypt yet. Current Chromium-based browsers on Windows protect cookies with App-Bound Encryption that only the browser itself can decrypt; supporting them needs an explicit browser integration such as an extension, and `unjar` doesn't bypass it through elevation or process injection.
+Chrome, Edge, Helium, Firefox and Safari, with Safari's named profiles, are verified end to end on macOS. On Linux, Chromium cookies are decrypted with the `peanuts` fallback key only, so profiles whose key is in the system keyring (v11) don't decrypt yet. Current Chromium-based browsers on Windows protect cookies with App-Bound Encryption that only the browser itself can decrypt; supporting them needs an explicit browser integration such as an extension, and `unjar` doesn't bypass it through elevation or process injection.
 
 ## 📚 Library usage
 
