@@ -109,10 +109,6 @@ let header = jar.to_header(); // or hand them straight to an HTTP client
 
 `--no-default-features` leaves out the command line and its dependencies. The [API docs](https://docs.rs/unjar) have the details.
 
-## 🤖 How it's made
-
-unjar is built with AI agents: I choose what to build, review the changes and test them on real machines. Before agents, I wrote software by hand for years ([macmon](https://github.com/vladkens/macmon), [twscrape](https://github.com/vladkens/twscrape), [ecloop](https://github.com/vladkens/ecloop)). Releases are rare on purpose: I'd rather test and polish a set of changes than ship each one as it lands, and I try not to break your config or data; when something has to break, [changelog.md](changelog.md) says so.
-
 ## 🤝 Contributing
 
 Pull requests are welcome. When reporting a bug, include the output of `unjar list` and your browser's version.
