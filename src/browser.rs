@@ -46,7 +46,7 @@ pub(crate) enum Kind {
 
 impl Browser {
   /// All browser variants known to this version of unjar.
-  pub const ALL: [Browser; 10] = [
+  pub const ALL: &[Browser] = &[
     Browser::Chrome,
     Browser::Chromium,
     Browser::Edge,
@@ -273,7 +273,7 @@ impl FromStr for Browser {
 pub fn profiles() -> Vec<Profile> {
   let mut profiles = Vec::new();
 
-  for browser in Browser::ALL.into_iter().filter(|browser| browser.kind() == Kind::Chromium) {
+  for &browser in Browser::ALL.iter().filter(|browser| browser.kind() == Kind::Chromium) {
     if let Some(root) = chromium_root(browser) {
       profiles.extend(profiles_in_root(browser, &root));
     }
@@ -456,7 +456,8 @@ fn profiles_in_root(browser: Browser, root: &Path) -> Vec<Profile> {
     })
     .collect();
 
-  // Opera keeps its only profile in the user-data directory itself rather than in `Default`.
+  // Some browsers, such as Opera, keep their only profile in the user-data directory itself; treat
+  // it as `Default` unless a `Default` subdirectory already holds one.
   if !profiles.iter().any(|profile| profile.id == "Default")
     && let Some(cookie_db) = profile_cookie_db(root)
   {
@@ -509,11 +510,14 @@ fn chromium_root(browser: Browser) -> Option<PathBuf> {
   #[cfg(target_os = "macos")]
   let base = dirs::config_dir()?;
   #[cfg(target_os = "linux")]
-  let base = if browser == Browser::Chrome {
-    std::env::var_os("CHROME_CONFIG_HOME").map(PathBuf::from).or_else(dirs::config_dir)?
-  } else {
-    dirs::config_dir()?
-  };
+  let base = match browser {
+    Browser::Chrome => std::env::var_os("CHROME_CONFIG_HOME"),
+    // https://github.com/imputnet/helium-linux/blob/main/patches/helium/linux/change-chromium-branding.patch
+    Browser::Helium => std::env::var_os("HELIUM_CONFIG_HOME"),
+    _ => None,
+  }
+  .map(PathBuf::from)
+  .or_else(dirs::config_dir)?;
   #[cfg(target_os = "windows")]
   let base = if browser == Browser::Opera { dirs::config_dir()? } else { dirs::data_local_dir()? };
 
@@ -879,11 +883,19 @@ mod tests {
     assert!(found[0].is_default());
     assert_eq!(found[0].path(), dir.path());
     assert_eq!(found[0].cookie_db(), dir.path().join("Cookies"));
+
+    profile(dir.path(), "Default", Some("Work"), false);
+    let found = profiles_in_root(Browser::Opera, dir.path());
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id(), "Default");
+    assert_eq!(found[0].name(), "Work");
+    assert_eq!(found[0].path(), dir.path().join("Default"));
+    assert_eq!(found[0].cookie_db(), dir.path().join("Default").join("Cookies"));
   }
 
   #[test]
   fn browser_names_round_trip() {
-    for browser in Browser::ALL {
+    for &browser in Browser::ALL {
       assert_eq!(browser.to_string().parse::<Browser>().unwrap(), browser);
     }
     assert_eq!("Helium".parse::<Browser>().unwrap(), Browser::Helium);
