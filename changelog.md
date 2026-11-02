@@ -1,3 +1,23 @@
+## v0.2.0 – 2026-11-02
+
+### Breaking Changes
+
+- `Browser::ALL` now lists 10 browsers, so its type changed from `[Browser; 6]` to `[Browser; 10]`
+- `Error::Database` now wraps a rusqlite 0.41 error
+
+### Features
+
+- Added Vivaldi, Opera, Arc and Helium, with their profiles found for you; Arc is macOS-only (#4)
+- Added `HELIUM_CONFIG_HOME` support for finding Helium profiles on Linux (#4)
+
+### Maintenance
+
+- Updated dependencies, including rusqlite 0.41
+
+**Full Changelog**: https://github.com/vladkens/unjar/compare/v0.1.1...v0.2.0
+
+---
+
 ## v0.1.1 – 2026-10-21
 
 ### Maintenance
