@@ -160,6 +160,14 @@ mod tests {
   }
 
   #[test]
+  fn a_cookie_without_expiry_is_a_session_s() {
+    let mut x = cookie("x.com", "a", "b");
+    assert!(x.is_session());
+    x.expires = 1;
+    assert!(!x.is_session());
+  }
+
+  #[test]
   fn domain_cookie_matches_host_and_subdomains() {
     // querying api.x.com gets the .x.com domain cookie plus its own host-only one,
     // but never the host-only cookie scoped to the parent x.com.

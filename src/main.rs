@@ -101,6 +101,7 @@ fn export(args: Export) -> Result<()> {
   if args.domains.is_empty() {
     return Err("missing domain; pass one or more domains, or `all`".into());
   }
+
   if args.domains.iter().any(|domain| domain == "list") {
     return Err("`list` is a command and cannot be combined with export arguments".into());
   }
@@ -109,6 +110,7 @@ fn export(args: Export) -> Result<()> {
   if !all && args.domains.iter().any(|domain| domain == "all") {
     return Err("`all` cannot be combined with domains".into());
   }
+
   if args.format == Format::Header && (all || args.domains.len() != 1) {
     return Err("header format requires exactly one domain".into());
   }
@@ -117,6 +119,7 @@ fn export(args: Export) -> Result<()> {
     Some(selector) => select_profile(args.browser, selector)?.cookies()?,
     None => args.browser.or_else(Browser::system_default).unwrap_or(Browser::Chrome).cookies()?,
   };
+
   let jar = if all {
     jar
   } else {

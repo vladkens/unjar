@@ -9,7 +9,7 @@ use crate::{Error, Result};
 ///
 /// Chromium-family variants share a cookie format but use distinct profile locations and decryption
 /// credentials.
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "a variant is the browser it names")]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Browser {
@@ -105,10 +105,8 @@ impl Browser {
     }
   }
 
-  /// Select a profile in this browser by ID, name, unique partial match, or explicit path.
-  ///
-  /// The browser is supplied by `self`, not encoded in `selector`. An explicit path may point to a
-  /// profile directory or its cookie database.
+  /// Select a profile in this browser by ID, name, unique partial match, or a path to a profile
+  /// directory or its cookie database.
   ///
   /// # Examples
   ///
@@ -149,12 +147,14 @@ impl Profile {
         if path.file_name().and_then(|name| name.to_str()) != Some("Cookies") {
           return Err(format!("{}: expected a Cookies database", path.display()).into());
         }
+
         let parent = path.parent().unwrap_or(path);
         let profile = if parent.file_name().and_then(|name| name.to_str()) == Some("Network") {
           parent.parent().unwrap_or(parent)
         } else {
           parent
         };
+
         (profile.to_path_buf(), path.to_path_buf())
       }
       Kind::Chromium => {
@@ -170,6 +170,7 @@ impl Profile {
         if path.file_name().and_then(|name| name.to_str()) != Some("cookies.sqlite") {
           return Err(format!("{}: expected a cookies.sqlite database", path.display()).into());
         }
+
         (path.parent().unwrap_or(path).to_path_buf(), path.to_path_buf())
       }
       Kind::Firefox => {
@@ -177,18 +178,21 @@ impl Profile {
         if !db.is_file() {
           return Err(format!("{}: cookies.sqlite not found", path.display()).into());
         }
+
         (path.to_path_buf(), db)
       }
       Kind::Safari if path.is_file() => {
         if path.file_name().and_then(|name| name.to_str()) != Some("Cookies.binarycookies") {
           return Err(format!("{}: expected a Cookies.binarycookies file", path.display()).into());
         }
+
         let parent = path.parent().unwrap_or(path);
         let profile = if parent.file_name().and_then(|name| name.to_str()) == Some("Cookies") {
           parent.parent().unwrap_or(parent)
         } else {
           parent
         };
+
         (profile.to_path_buf(), path.to_path_buf())
       }
       Kind::Safari => {
@@ -267,6 +271,7 @@ impl fmt::Display for Browser {
       Browser::Firefox => "firefox",
       Browser::Safari => "safari",
     };
+
     f.write_str(s)
   }
 }
@@ -359,9 +364,11 @@ pub fn profiles() -> Vec<Profile> {
       profiles.extend(profiles_in_root(browser, &root));
     }
   }
+
   if let Some(root) = firefox_root() {
     profiles.extend(firefox_profiles_in_root(&root));
   }
+
   profiles.extend(safari_profiles());
 
   profiles.sort_by(|a, b| {
@@ -373,11 +380,8 @@ pub fn profiles() -> Vec<Profile> {
   profiles
 }
 
-/// Select a discovered profile by ID, name, unique partial match, or known path.
-///
-/// `selector` does not include a browser name. Use [`Browser::find_profile`] to constrain the
-/// lookup to one browser; that method also accepts an explicit profile directory or cookie database
-/// path.
+/// Select a discovered profile of any browser by ID, name, unique partial match, or known path;
+/// [`Browser::find_profile`] selects in one browser, by any path too.
 ///
 /// # Examples
 ///
@@ -525,6 +529,7 @@ fn profiles_in_root(browser: Browser, root: &Path) -> Vec<Profile> {
       if !file_type.is_dir() || file_type.is_symlink() || directory == "Network" {
         return None;
       }
+
       let path = entry.path();
       let cookie_db = profile_cookie_db(&path)?;
       Some(Profile {
@@ -688,6 +693,7 @@ fn firefox_profiles_in_root(root: &Path) -> Vec<Profile> {
       } else {
         PathBuf::from(configured_path)
       };
+
       let cookie_db = path.join("cookies.sqlite");
       if !cookie_db.is_file() {
         return None;
@@ -698,6 +704,7 @@ fn firefox_profiles_in_root(root: &Path) -> Vec<Profile> {
       } else {
         default_paths.iter().any(|default| same_path(default, &path))
       };
+
       Some(Profile {
         browser: Browser::Firefox,
         id: name.clone(),
@@ -728,6 +735,7 @@ fn firefox_profile_group_profiles(root: &Path, default_paths: &[PathBuf]) -> Vec
     if database.extension().and_then(|extension| extension.to_str()) != Some("sqlite") {
       continue;
     }
+
     let Ok(db) = crate::sqlite::open_copy(&database) else {
       continue;
     };
@@ -772,6 +780,7 @@ fn parse_ini(contents: &str) -> Vec<(String, HashMap<String, String>)> {
     if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
       continue;
     }
+
     if let Some(section) = line.strip_prefix('[').and_then(|line| line.strip_suffix(']')) {
       sections.push((section.to_string(), HashMap::new()));
     } else if let Some((key, value)) = line.split_once('=')
@@ -810,6 +819,7 @@ fn safari_profiles_in_root(container: &Path, legacy_db: &Path) -> Vec<Profile> {
     } else {
       cookie_db.parent().and_then(Path::parent).unwrap_or(legacy_db).to_path_buf()
     };
+
     profiles.push(Profile {
       browser: Browser::Safari,
       id: "default".into(),
@@ -829,7 +839,8 @@ fn safari_profiles_in_root(container: &Path, legacy_db: &Path) -> Vec<Profile> {
       continue;
     }
 
-    let fallback = format!("profile-{}", uuid[..8].to_ascii_lowercase());
+    let fallback =
+      format!("profile-{}", uuid.chars().take(8).collect::<String>().to_ascii_lowercase());
     let name = title.trim();
     let name = if name.is_empty() { fallback } else { name.to_owned() };
     let id = unique_profile_id(&profiles, &name);
@@ -892,12 +903,14 @@ fn unique_profile_id(profiles: &[Profile], name: &str) -> String {
   if profiles.iter().all(|profile| profile.id != name) {
     return name.to_owned();
   }
+
   for suffix in 2.. {
     let candidate = format!("{name}-{suffix}");
     if profiles.iter().all(|profile| profile.id != candidate) {
       return candidate;
     }
   }
+
   unreachable!()
 }
 
@@ -1000,6 +1013,7 @@ mod tests {
     for browser in Browser::all() {
       assert_eq!(browser.to_string().parse::<Browser>().unwrap(), browser);
     }
+
     assert_eq!("Helium".parse::<Browser>().unwrap(), Browser::Helium);
   }
 

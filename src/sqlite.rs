@@ -12,13 +12,8 @@ pub(crate) struct Db {
   _temp: Option<TempCopy>,
 }
 
-/// Open a browser cookie database for reading without disturbing the live file.
-///
-/// A plain read-only open is tried first: it keeps SQLite's locking and WAL
-/// handling intact, so the browser can keep writing and we still read a
-/// consistent snapshot. If that fails (e.g. the file is exclusively locked, as
-/// on Windows), the database and its `-wal`/`-shm` sidecars are copied to a temp
-/// directory and the copy is opened instead.
+/// Open a browser cookie database read-only, keeping SQLite's locking and WAL so the browser
+/// writes on; one locked, as on Windows, is read from a temporary copy with its `-wal` and `-shm`.
 pub(crate) fn open(path: &Path) -> Result<Db> {
   match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
     Ok(conn) => Ok(Db { conn, _temp: None }),
@@ -35,8 +30,8 @@ pub(crate) fn open_copy(path: &Path) -> Result<Db> {
 }
 
 struct TempCopy {
-  #[allow(dead_code, reason = "keeps the temporary directory alive until Drop")]
-  dir: TempDir,
+  /// Kept for its Drop, which deletes the directory.
+  _dir: TempDir,
   db: PathBuf,
 }
 
@@ -56,7 +51,7 @@ impl TempCopy {
       }
     }
 
-    Ok(Self { dir, db })
+    Ok(Self { _dir: dir, db })
   }
 }
 
