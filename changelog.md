@@ -1,3 +1,17 @@
+## v0.3.0 – 2026-11-18
+
+### Breaking Changes
+
+- Without `--browser`, `unjar` on macOS now reads the default profile of your default browser, the one that opens links, instead of Chrome; it falls back to Chrome when that browser isn't supported, and Linux and Windows still read Chrome (#7)
+
+### Features
+
+- Added `Browser::system_default()`, which returns the system's default browser when unjar supports it (#7)
+
+**Full Changelog**: https://github.com/vladkens/unjar/compare/v0.2.0...v0.3.0
+
+---
+
 ## v0.2.0 – 2026-11-02
 
 ### Breaking Changes

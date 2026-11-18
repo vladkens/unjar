@@ -1,6 +1,6 @@
 [package]
 name = "unjar"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "Read and export cookies from local browser profiles. CLI and Rust library."
 authors = ["vladkens"]
