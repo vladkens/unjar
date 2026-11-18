@@ -1,7 +1,10 @@
 .PHONY: prepare check test build update clean
 
+LINT := uv run --script https://raw.githubusercontent.com/vladkens/lint/main/rust.py
+
 prepare:
 	cargo +nightly fmt
+	$(LINT) fix
 	cargo clippy --fix --all-targets --locked --allow-dirty -- -D warnings
 	cargo check --release --locked
 	cargo check --lib --no-default-features --locked
@@ -9,6 +12,7 @@ prepare:
 check:
 	cargo +nightly fmt --check
 	cargo clippy --all-targets --locked -- -D warnings
+	$(LINT)
 	cargo check --release --locked
 	cargo check --lib --no-default-features --locked
 
