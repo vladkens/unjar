@@ -71,6 +71,24 @@ impl Browser {
     ALL.into_iter()
   }
 
+  /// Return the system's default web browser, the one that opens links, if unjar supports it.
+  ///
+  /// On macOS this is the app LaunchServices opens `https` links with, Safari until the user picks
+  /// another. Returns `None` for a browser unjar doesn't know, and on Linux and Windows.
+  ///
+  /// # Examples
+  ///
+  /// ```no_run
+  /// use unjar::Browser;
+  ///
+  /// let browser = Browser::system_default().unwrap_or(Browser::Chrome);
+  /// let jar = browser.cookies()?.domain("x.com");
+  /// # Ok::<(), unjar::Error>(())
+  /// ```
+  pub fn system_default() -> Option<Browser> {
+    system_default_browser()
+  }
+
   pub(crate) fn kind(&self) -> Kind {
     match self {
       Browser::Firefox => Kind::Firefox,
@@ -271,6 +289,57 @@ impl FromStr for Browser {
       other => Err(format!("unknown browser: {other}").into()),
     }
   }
+}
+
+#[cfg(target_os = "macos")]
+fn system_default_browser() -> Option<Browser> {
+  use core_foundation::base::TCFType;
+  use core_foundation::string::{CFString, CFStringRef};
+
+  // Deprecated since macOS 12 for NSWorkspace, which would need Objective-C bindings; still works.
+  #[link(name = "CoreServices", kind = "framework")]
+  unsafe extern "C" {
+    fn LSCopyDefaultHandlerForURLScheme(scheme: CFStringRef) -> CFStringRef;
+  }
+
+  let scheme = CFString::from_static_string("https");
+  // SAFETY: the scheme is a valid CFString; the result is a new CFString we own, or null.
+  let id = unsafe { LSCopyDefaultHandlerForURLScheme(scheme.as_concrete_TypeRef()) };
+  if id.is_null() {
+    return None;
+  }
+
+  // SAFETY: a Copy function's non-null result is ours to release, which the wrapper does.
+  let id = unsafe { CFString::wrap_under_create_rule(id) };
+  from_bundle_id(&id.to_string())
+}
+
+/// Linux and Windows aren't read: a Linux desktop entry doesn't tell a native install from a Snap
+/// or Flatpak one, whose profiles live elsewhere (Fedora's native Firefox is `org.mozilla.firefox`,
+/// like the Flatpak), and Windows keeps its choice as a registry ProgId while its Chromium cookies
+/// can't be decrypted anyway.
+#[cfg(not(target_os = "macos"))]
+fn system_default_browser() -> Option<Browser> {
+  None
+}
+
+/// Map a macOS bundle ID to its browser; LaunchServices may return them lowercased. Beta and other
+/// channels keep their profiles elsewhere, so they don't match.
+#[cfg(any(target_os = "macos", test))]
+fn from_bundle_id(id: &str) -> Option<Browser> {
+  Some(match id.to_ascii_lowercase().as_str() {
+    "com.google.chrome" => Browser::Chrome,
+    "org.chromium.chromium" => Browser::Chromium,
+    "com.microsoft.edgemac" => Browser::Edge,
+    "com.brave.browser" => Browser::Brave,
+    "com.vivaldi.vivaldi" => Browser::Vivaldi,
+    "com.operasoftware.opera" => Browser::Opera,
+    "company.thebrowser.browser" => Browser::Arc,
+    "net.imput.helium" => Browser::Helium,
+    "org.mozilla.firefox" => Browser::Firefox,
+    "com.apple.safari" => Browser::Safari,
+    _ => return None,
+  })
 }
 
 /// Discover browser profiles in known locations.
@@ -927,6 +996,34 @@ mod tests {
       assert_eq!(browser.to_string().parse::<Browser>().unwrap(), browser);
     }
     assert_eq!("Helium".parse::<Browser>().unwrap(), Browser::Helium);
+  }
+
+  #[cfg(target_os = "macos")]
+  #[test]
+  fn system_default_asks_launch_services() {
+    // Whatever this Mac's default is, the call answers without crashing.
+    let _ = Browser::system_default();
+  }
+
+  #[test]
+  fn system_default_maps_bundle_ids() {
+    for (id, browser) in [
+      ("com.google.chrome", Some(Browser::Chrome)),
+      ("org.chromium.Chromium", Some(Browser::Chromium)),
+      ("com.microsoft.edgemac", Some(Browser::Edge)),
+      ("com.brave.Browser", Some(Browser::Brave)),
+      ("com.vivaldi.Vivaldi", Some(Browser::Vivaldi)),
+      ("com.operasoftware.Opera", Some(Browser::Opera)),
+      ("company.thebrowser.Browser", Some(Browser::Arc)),
+      ("net.imput.helium", Some(Browser::Helium)),
+      ("org.mozilla.firefox", Some(Browser::Firefox)),
+      ("com.apple.Safari", Some(Browser::Safari)),
+      ("com.google.chrome.beta", None),
+      ("org.mozilla.firefoxdeveloperedition", None),
+      ("com.apple.mail", None),
+    ] {
+      assert_eq!(from_bundle_id(id), browser, "{id}");
+    }
   }
 
   #[test]

@@ -42,7 +42,7 @@ struct Export {
   #[arg(value_name = "DOMAIN")]
   domains: Vec<String>,
 
-  /// Browser to use (defaults to chrome when --profile is omitted)
+  /// Browser to use (without --profile: the default browser on macOS if supported, else chrome)
   #[arg(short, long)]
   browser: Option<Browser>,
 
@@ -113,15 +113,9 @@ fn export(args: Export) -> Result<()> {
     return Err("header format requires exactly one domain".into());
   }
 
-  let profile = match &args.profile {
-    Some(selector) => Some(select_profile(args.browser, selector)?),
-    None => None,
-  };
-  let browser = args.browser.unwrap_or(Browser::Chrome);
-
-  let jar = match profile {
-    Some(profile) => profile.cookies()?,
-    None => browser.cookies()?,
+  let jar = match &args.profile {
+    Some(selector) => select_profile(args.browser, selector)?.cookies()?,
+    None => args.browser.or_else(Browser::system_default).unwrap_or(Browser::Chrome).cookies()?,
   };
   let jar = if all {
     jar
