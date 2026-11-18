@@ -73,9 +73,8 @@ impl Browser {
 
   /// Return the system's default web browser, the one that opens links, if unjar supports it.
   ///
-  /// On macOS this is the LaunchServices handler for `https` (or `http`). Returns `None` when the
-  /// setting isn't there or can't be read, for a browser unjar doesn't know, and on Linux and
-  /// Windows.
+  /// On macOS this is the app LaunchServices opens `https` links with, Safari until the user picks
+  /// another. Returns `None` for a browser unjar doesn't know, and on Linux and Windows.
   ///
   /// # Examples
   ///
@@ -294,19 +293,25 @@ impl FromStr for Browser {
 
 #[cfg(target_os = "macos")]
 fn system_default_browser() -> Option<Browser> {
-  let plist =
-    dirs::preference_dir()?.join("com.apple.LaunchServices/com.apple.launchservices.secure.plist");
-  let out = std::process::Command::new("/usr/bin/plutil")
-    .args(["-extract", "LSHandlers", "json", "-o", "-"])
-    .arg(plist)
-    .output()
-    .ok()?;
-  if !out.status.success() {
+  use core_foundation::base::TCFType;
+  use core_foundation::string::{CFString, CFStringRef};
+
+  // Deprecated since macOS 12 for NSWorkspace, which would need Objective-C bindings; still works.
+  #[link(name = "CoreServices", kind = "framework")]
+  unsafe extern "C" {
+    fn LSCopyDefaultHandlerForURLScheme(scheme: CFStringRef) -> CFStringRef;
+  }
+
+  let scheme = CFString::from_static_string("https");
+  // SAFETY: the scheme is a valid CFString; the result is a new CFString we own, or null.
+  let id = unsafe { LSCopyDefaultHandlerForURLScheme(scheme.as_concrete_TypeRef()) };
+  if id.is_null() {
     return None;
   }
 
-  let handlers: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).ok()?;
-  from_bundle_id(url_handler(&handlers)?)
+  // SAFETY: a Copy function's non-null result is ours to release, which the wrapper does.
+  let id = unsafe { CFString::wrap_under_create_rule(id) };
+  from_bundle_id(&id.to_string())
 }
 
 /// Linux and Windows aren't read: a Linux desktop entry doesn't tell a native install from a Snap
@@ -318,19 +323,7 @@ fn system_default_browser() -> Option<Browser> {
   None
 }
 
-/// Return the bundle ID that handles `https` links, else `http` ones, from LaunchServices'
-/// `LSHandlers`. A Mac whose default browser was never changed has neither entry.
-#[cfg(any(target_os = "macos", test))]
-fn url_handler(handlers: &[serde_json::Value]) -> Option<&str> {
-  ["https", "http"].into_iter().find_map(|scheme| {
-    handlers
-      .iter()
-      .find(|x| x["LSHandlerURLScheme"].as_str().is_some_and(|x| x.eq_ignore_ascii_case(scheme)))
-      .and_then(|x| x["LSHandlerRoleAll"].as_str())
-  })
-}
-
-/// Map a macOS bundle ID to its browser; LaunchServices keeps them lowercased. Beta and other
+/// Map a macOS bundle ID to its browser; LaunchServices may return them lowercased. Beta and other
 /// channels keep their profiles elsewhere, so they don't match.
 #[cfg(any(target_os = "macos", test))]
 fn from_bundle_id(id: &str) -> Option<Browser> {
@@ -1005,20 +998,11 @@ mod tests {
     assert_eq!("Helium".parse::<Browser>().unwrap(), Browser::Helium);
   }
 
+  #[cfg(target_os = "macos")]
   #[test]
-  fn system_default_reads_the_https_handler_then_http() {
-    let handlers = |entries: &str| serde_json::from_str::<Vec<serde_json::Value>>(entries).unwrap();
-    let mail = r#"{"LSHandlerURLScheme":"mailto","LSHandlerRoleAll":"com.apple.mail"}"#;
-    let http = r#"{"LSHandlerURLScheme":"http","LSHandlerRoleAll":"com.google.chrome"}"#;
-    let https = r#"{"LSHandlerPreferredVersions":{"LSHandlerRoleAll":"-"},"LSHandlerURLScheme":"https","LSHandlerRoleAll":"net.imput.helium"}"#;
-    let html = r#"{"LSHandlerContentType":"public.html","LSHandlerRoleAll":"org.mozilla.firefox"}"#;
-
-    let found = handlers(&format!("[{mail},{http},{html},{https}]"));
-    assert_eq!(url_handler(&found), Some("net.imput.helium"));
-    let found = handlers(&format!("[{mail},{http}]"));
-    assert_eq!(url_handler(&found), Some("com.google.chrome"));
-    let found = handlers(&format!("[{mail},{html}]"));
-    assert_eq!(url_handler(&found), None);
+  fn system_default_asks_launch_services() {
+    // Whatever this Mac's default is, the call answers without crashing.
+    let _ = Browser::system_default();
   }
 
   #[test]
