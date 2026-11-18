@@ -42,7 +42,7 @@ cargo install --git https://github.com/vladkens/unjar
 
 ```sh
 unjar list                          # the browser profiles found on this machine
-unjar x.com                         # cookies for x.com from Chrome's default profile, as cookies.txt
+unjar x.com                         # cookies for x.com from your default browser, as cookies.txt
 unjar x.com t.co                    # or for several domains
 unjar all                           # every cookie of the profile
 unjar -p Work x.com                 # from another profile, by ID or name
@@ -53,7 +53,7 @@ unjar -f header x.com               # as a Cookie: header value
 unjar -o cookies.txt x.com          # into a file
 ```
 
-Without `--browser` a profile is looked up in every browser: a unique ID or name is enough, and `--browser` tells duplicates apart. A path may point to a profile directory or straight to its cookie database; for a copied or unknown path, add `--browser` so `unjar` picks the right decryption. The `header` format takes one domain and includes every cookie stored for it, without checking path, scheme or expiry; use cookies.txt or JSON for several domains or `all`.
+Without `--browser`, `unjar` reads the default profile of your default browser, the one that opens links; when `unjar` doesn't support that browser or can't tell which it is, and on Windows, it reads Chrome. A `--profile` without `--browser` is looked up in every browser: a unique ID or name is enough, and `--browser` tells duplicates apart. A path may point to a profile directory or straight to its cookie database; for a copied or unknown path, add `--browser` so `unjar` picks the right decryption. The `header` format takes one domain and includes every cookie stored for it, without checking path, scheme or expiry; use cookies.txt or JSON for several domains or `all`.
 
 ### Recipes
 

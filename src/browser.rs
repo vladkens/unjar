@@ -71,6 +71,25 @@ impl Browser {
     ALL.into_iter()
   }
 
+  /// Return the system's default web browser, the one that opens links, if unjar supports it.
+  ///
+  /// On macOS this is the LaunchServices handler for `https` (or `http`), on Linux the browser
+  /// `xdg-settings get default-web-browser` names. Returns `None` when the setting isn't there or
+  /// can't be read, for a browser unjar doesn't know, and on Windows.
+  ///
+  /// # Examples
+  ///
+  /// ```no_run
+  /// use unjar::Browser;
+  ///
+  /// let browser = Browser::system_default().unwrap_or(Browser::Chrome);
+  /// let jar = browser.cookies()?.domain("x.com");
+  /// # Ok::<(), unjar::Error>(())
+  /// ```
+  pub fn system_default() -> Option<Browser> {
+    system_default_browser()
+  }
+
   pub(crate) fn kind(&self) -> Kind {
     match self {
       Browser::Firefox => Kind::Firefox,
@@ -271,6 +290,92 @@ impl FromStr for Browser {
       other => Err(format!("unknown browser: {other}").into()),
     }
   }
+}
+
+#[cfg(target_os = "macos")]
+fn system_default_browser() -> Option<Browser> {
+  let plist =
+    dirs::preference_dir()?.join("com.apple.LaunchServices/com.apple.launchservices.secure.plist");
+  let out = std::process::Command::new("/usr/bin/plutil")
+    .args(["-extract", "LSHandlers", "json", "-o", "-"])
+    .arg(plist)
+    .output()
+    .ok()?;
+  if !out.status.success() {
+    return None;
+  }
+
+  let handlers: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).ok()?;
+  from_bundle_id(url_handler(&handlers)?)
+}
+
+#[cfg(target_os = "linux")]
+fn system_default_browser() -> Option<Browser> {
+  let out = std::process::Command::new("xdg-settings")
+    .args(["get", "default-web-browser"])
+    .output()
+    .ok()?;
+  if !out.status.success() {
+    return None;
+  }
+
+  from_desktop_entry(String::from_utf8(out.stdout).ok()?.trim())
+}
+
+/// Windows isn't read: its choice is a registry ProgId, and the Chromium browsers it mostly names
+/// can't be decrypted there.
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn system_default_browser() -> Option<Browser> {
+  None
+}
+
+/// Return the bundle ID that handles `https` links, else `http` ones, from LaunchServices'
+/// `LSHandlers`. A Mac whose default browser was never changed has neither entry.
+#[cfg(any(target_os = "macos", test))]
+fn url_handler(handlers: &[serde_json::Value]) -> Option<&str> {
+  ["https", "http"].into_iter().find_map(|scheme| {
+    handlers
+      .iter()
+      .find(|x| x["LSHandlerURLScheme"].as_str().is_some_and(|x| x.eq_ignore_ascii_case(scheme)))
+      .and_then(|x| x["LSHandlerRoleAll"].as_str())
+  })
+}
+
+/// Map a macOS bundle ID to its browser; LaunchServices keeps them lowercased. Beta and other
+/// channels keep their profiles elsewhere, so they don't match.
+#[cfg(any(target_os = "macos", test))]
+fn from_bundle_id(id: &str) -> Option<Browser> {
+  Some(match id.to_ascii_lowercase().as_str() {
+    "com.google.chrome" => Browser::Chrome,
+    "org.chromium.chromium" => Browser::Chromium,
+    "com.microsoft.edgemac" => Browser::Edge,
+    "com.brave.browser" => Browser::Brave,
+    "com.vivaldi.vivaldi" => Browser::Vivaldi,
+    "com.operasoftware.opera" => Browser::Opera,
+    "company.thebrowser.browser" => Browser::Arc,
+    "net.imput.helium" => Browser::Helium,
+    "org.mozilla.firefox" => Browser::Firefox,
+    "com.apple.safari" => Browser::Safari,
+    _ => return None,
+  })
+}
+
+/// Map a Linux desktop entry to its browser. Snap and Flatpak builds keep their profiles inside
+/// their sandboxes, which unjar doesn't search, so their entries don't match.
+#[cfg(any(target_os = "linux", test))]
+fn from_desktop_entry(entry: &str) -> Option<Browser> {
+  Some(match entry.strip_suffix(".desktop")? {
+    "google-chrome" => Browser::Chrome,
+    "chromium" | "chromium-browser" => Browser::Chromium,
+    "microsoft-edge" => Browser::Edge,
+    "brave-browser" => Browser::Brave,
+    "vivaldi-stable" => Browser::Vivaldi,
+    "opera" => Browser::Opera,
+    // https://github.com/imputnet/helium-linux/blob/main/package/helium.desktop
+    "helium" => Browser::Helium,
+    "firefox" | "firefox-esr" => Browser::Firefox,
+    _ => return None,
+  })
 }
 
 /// Discover browser profiles in known locations.
@@ -927,6 +1032,61 @@ mod tests {
       assert_eq!(browser.to_string().parse::<Browser>().unwrap(), browser);
     }
     assert_eq!("Helium".parse::<Browser>().unwrap(), Browser::Helium);
+  }
+
+  #[test]
+  fn system_default_reads_the_https_handler_then_http() {
+    let handlers = |entries: &str| serde_json::from_str::<Vec<serde_json::Value>>(entries).unwrap();
+    let mail = r#"{"LSHandlerURLScheme":"mailto","LSHandlerRoleAll":"com.apple.mail"}"#;
+    let http = r#"{"LSHandlerURLScheme":"http","LSHandlerRoleAll":"com.google.chrome"}"#;
+    let https = r#"{"LSHandlerPreferredVersions":{"LSHandlerRoleAll":"-"},"LSHandlerURLScheme":"https","LSHandlerRoleAll":"net.imput.helium"}"#;
+    let html = r#"{"LSHandlerContentType":"public.html","LSHandlerRoleAll":"org.mozilla.firefox"}"#;
+
+    let found = handlers(&format!("[{mail},{http},{html},{https}]"));
+    assert_eq!(url_handler(&found), Some("net.imput.helium"));
+    let found = handlers(&format!("[{mail},{http}]"));
+    assert_eq!(url_handler(&found), Some("com.google.chrome"));
+    let found = handlers(&format!("[{mail},{html}]"));
+    assert_eq!(url_handler(&found), None);
+  }
+
+  #[test]
+  fn system_default_maps_bundle_ids_and_desktop_entries() {
+    for (id, browser) in [
+      ("com.google.chrome", Some(Browser::Chrome)),
+      ("org.chromium.Chromium", Some(Browser::Chromium)),
+      ("com.microsoft.edgemac", Some(Browser::Edge)),
+      ("com.brave.Browser", Some(Browser::Brave)),
+      ("com.vivaldi.Vivaldi", Some(Browser::Vivaldi)),
+      ("com.operasoftware.Opera", Some(Browser::Opera)),
+      ("company.thebrowser.Browser", Some(Browser::Arc)),
+      ("net.imput.helium", Some(Browser::Helium)),
+      ("org.mozilla.firefox", Some(Browser::Firefox)),
+      ("com.apple.Safari", Some(Browser::Safari)),
+      ("com.google.chrome.beta", None),
+      ("org.mozilla.firefoxdeveloperedition", None),
+      ("com.apple.mail", None),
+    ] {
+      assert_eq!(from_bundle_id(id), browser, "{id}");
+    }
+
+    for (entry, browser) in [
+      ("google-chrome.desktop", Some(Browser::Chrome)),
+      ("chromium.desktop", Some(Browser::Chromium)),
+      ("chromium-browser.desktop", Some(Browser::Chromium)),
+      ("microsoft-edge.desktop", Some(Browser::Edge)),
+      ("brave-browser.desktop", Some(Browser::Brave)),
+      ("vivaldi-stable.desktop", Some(Browser::Vivaldi)),
+      ("opera.desktop", Some(Browser::Opera)),
+      ("helium.desktop", Some(Browser::Helium)),
+      ("firefox.desktop", Some(Browser::Firefox)),
+      ("firefox-esr.desktop", Some(Browser::Firefox)),
+      ("firefox_firefox.desktop", None),
+      ("org.mozilla.firefox.desktop", None),
+      ("firefox", None),
+    ] {
+      assert_eq!(from_desktop_entry(entry), browser, "{entry}");
+    }
   }
 
   #[test]
