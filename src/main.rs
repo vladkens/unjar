@@ -42,7 +42,7 @@ struct Export {
   #[arg(value_name = "DOMAIN")]
   domains: Vec<String>,
 
-  /// Browser to use (without --profile: the system's default browser if supported, else chrome)
+  /// Browser to use (without --profile: the default browser on macOS if supported, else chrome)
   #[arg(short, long)]
   browser: Option<Browser>,
 

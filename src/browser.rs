@@ -73,9 +73,9 @@ impl Browser {
 
   /// Return the system's default web browser, the one that opens links, if unjar supports it.
   ///
-  /// On macOS this is the LaunchServices handler for `https` (or `http`), on Linux the browser
-  /// `xdg-settings get default-web-browser` names. Returns `None` when the setting isn't there or
-  /// can't be read, for a browser unjar doesn't know, and on Windows.
+  /// On macOS this is the LaunchServices handler for `https` (or `http`). Returns `None` when the
+  /// setting isn't there or can't be read, for a browser unjar doesn't know, and on Linux and
+  /// Windows.
   ///
   /// # Examples
   ///
@@ -309,22 +309,11 @@ fn system_default_browser() -> Option<Browser> {
   from_bundle_id(url_handler(&handlers)?)
 }
 
-#[cfg(target_os = "linux")]
-fn system_default_browser() -> Option<Browser> {
-  let out = std::process::Command::new("xdg-settings")
-    .args(["get", "default-web-browser"])
-    .output()
-    .ok()?;
-  if !out.status.success() {
-    return None;
-  }
-
-  from_desktop_entry(String::from_utf8(out.stdout).ok()?.trim())
-}
-
-/// Windows isn't read: its choice is a registry ProgId, and the Chromium browsers it mostly names
-/// can't be decrypted there.
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+/// Linux and Windows aren't read: a Linux desktop entry doesn't tell a native install from a Snap
+/// or Flatpak one, whose profiles live elsewhere (Fedora's native Firefox is `org.mozilla.firefox`,
+/// like the Flatpak), and Windows keeps its choice as a registry ProgId while its Chromium cookies
+/// can't be decrypted anyway.
+#[cfg(not(target_os = "macos"))]
 fn system_default_browser() -> Option<Browser> {
   None
 }
@@ -356,24 +345,6 @@ fn from_bundle_id(id: &str) -> Option<Browser> {
     "net.imput.helium" => Browser::Helium,
     "org.mozilla.firefox" => Browser::Firefox,
     "com.apple.safari" => Browser::Safari,
-    _ => return None,
-  })
-}
-
-/// Map a Linux desktop entry to its browser. Snap and Flatpak builds keep their profiles inside
-/// their sandboxes, which unjar doesn't search, so their entries don't match.
-#[cfg(any(target_os = "linux", test))]
-fn from_desktop_entry(entry: &str) -> Option<Browser> {
-  Some(match entry.strip_suffix(".desktop")? {
-    "google-chrome" => Browser::Chrome,
-    "chromium" | "chromium-browser" => Browser::Chromium,
-    "microsoft-edge" => Browser::Edge,
-    "brave-browser" => Browser::Brave,
-    "vivaldi-stable" => Browser::Vivaldi,
-    "opera" => Browser::Opera,
-    // https://github.com/imputnet/helium-linux/blob/main/package/helium.desktop
-    "helium" => Browser::Helium,
-    "firefox" | "firefox-esr" => Browser::Firefox,
     _ => return None,
   })
 }
@@ -1051,7 +1022,7 @@ mod tests {
   }
 
   #[test]
-  fn system_default_maps_bundle_ids_and_desktop_entries() {
+  fn system_default_maps_bundle_ids() {
     for (id, browser) in [
       ("com.google.chrome", Some(Browser::Chrome)),
       ("org.chromium.Chromium", Some(Browser::Chromium)),
@@ -1068,24 +1039,6 @@ mod tests {
       ("com.apple.mail", None),
     ] {
       assert_eq!(from_bundle_id(id), browser, "{id}");
-    }
-
-    for (entry, browser) in [
-      ("google-chrome.desktop", Some(Browser::Chrome)),
-      ("chromium.desktop", Some(Browser::Chromium)),
-      ("chromium-browser.desktop", Some(Browser::Chromium)),
-      ("microsoft-edge.desktop", Some(Browser::Edge)),
-      ("brave-browser.desktop", Some(Browser::Brave)),
-      ("vivaldi-stable.desktop", Some(Browser::Vivaldi)),
-      ("opera.desktop", Some(Browser::Opera)),
-      ("helium.desktop", Some(Browser::Helium)),
-      ("firefox.desktop", Some(Browser::Firefox)),
-      ("firefox-esr.desktop", Some(Browser::Firefox)),
-      ("firefox_firefox.desktop", None),
-      ("org.mozilla.firefox.desktop", None),
-      ("firefox", None),
-    ] {
-      assert_eq!(from_desktop_entry(entry), browser, "{entry}");
     }
   }
 
