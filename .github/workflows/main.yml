@@ -24,6 +24,7 @@ jobs:
           shared-key: release
           save-if: ${{ github.event_name != 'pull_request' }}
       - run: rustup toolchain install nightly --profile minimal --component rustfmt
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - run: make check
       - run: make test
       - run: RUSTDOCFLAGS="-D warnings" cargo doc --lib --no-default-features --locked --no-deps

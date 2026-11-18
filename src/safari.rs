@@ -49,6 +49,7 @@ fn parse_page(page: &[u8], cookies: &mut Vec<Cookie>) -> std::result::Result<(),
   if header.take(4)? != [0; 4] {
     return Err("invalid page header");
   }
+
   let header_len = header.position();
 
   for index in 0..cookie_count {
@@ -57,6 +58,7 @@ fn parse_page(page: &[u8], cookies: &mut Vec<Cookie>) -> std::result::Result<(),
     if offset < header_len {
       return Err("cookie offset points into the page header");
     }
+
     let record = page.get(offset..).ok_or("cookie offset is outside its page")?;
     cookies.push(parse_cookie(record)?);
   }
@@ -69,6 +71,7 @@ fn parse_cookie(data: &[u8]) -> std::result::Result<Cookie, &'static str> {
   if !(COOKIE_HEADER_LEN..=COOKIE_HEADER_LEN + MAX_COOKIE_DATA_LEN).contains(&size) {
     return Err("invalid cookie size");
   }
+
   let record = data.get(..size).ok_or("cookie extends past its page")?;
   if record.get(36..40) != Some(&[0; 4]) {
     return Err("invalid cookie header");
@@ -100,6 +103,7 @@ fn read_string(data: &[u8], offset: u32) -> std::result::Result<String, &'static
   if offset < COOKIE_HEADER_LEN {
     return Err("cookie string offset points into its header");
   }
+
   let tail = data.get(offset..).ok_or("cookie string offset is outside its record")?;
   let end = tail.iter().position(|byte| *byte == 0).ok_or("unterminated cookie string")?;
   Ok(String::from_utf8_lossy(&tail[..end]).into_owned())
