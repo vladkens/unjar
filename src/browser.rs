@@ -729,6 +729,7 @@ fn safari_profiles() -> Vec<Profile> {
   Vec::new()
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn safari_profiles_in_root(container: &Path, legacy_db: &Path) -> Vec<Profile> {
   let modern_db = container.join("Cookies").join("Cookies.binarycookies");
   let default_db = first_existing(&[modern_db, legacy_db.to_path_buf()]);
@@ -776,6 +777,7 @@ fn safari_profiles_in_root(container: &Path, legacy_db: &Path) -> Vec<Profile> {
   profiles
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn safari_named_profiles_from_db(container: &Path) -> Option<Vec<(String, String)>> {
   let path = container.join("Safari").join("SafariTabs.db");
   let db = crate::sqlite::open_copy(&path).ok()?;
@@ -792,6 +794,7 @@ fn safari_named_profiles_from_db(container: &Path) -> Option<Vec<(String, String
   Some(rows.filter_map(std::result::Result::ok).filter(|(uuid, _)| is_uuid(uuid)).collect())
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn safari_named_profiles_from_directories(container: &Path) -> Vec<(String, String)> {
   let Ok(entries) = std::fs::read_dir(container.join("Safari").join("Profiles")) else {
     return Vec::new();
@@ -805,6 +808,7 @@ fn safari_named_profiles_from_directories(container: &Path) -> Vec<(String, Stri
     .collect()
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn is_uuid(value: &str) -> bool {
   let mut parts = value.split('-');
   [8, 4, 4, 4, 12].into_iter().all(|len| {
@@ -814,6 +818,7 @@ fn is_uuid(value: &str) -> bool {
   }) && parts.next().is_none()
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn unique_profile_id(profiles: &[Profile], name: &str) -> String {
   if profiles.iter().all(|profile| profile.id != name) {
     return name.to_owned();
